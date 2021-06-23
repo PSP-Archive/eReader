@@ -1,0 +1,87 @@
+2006-04-01  v0.8
+[+] Support background picture, just put bg.png in eReader folder
+[+] Could delete directory now
+[+] Cound jump to up-level directory by pressing SQUARE button in file list
+[!] Switched depth of display color to 32bit from 16bit
+[!] Improved bicubic resizing speed a bit
+[!] Image smaller than fullscreen is put in centre of screen
+[!] Fixed resize and scroll bar bug
+[!] Fixed 12pt font
+[!] Fixed SJIS conversion
+[!] Fixed some minor bugs
+
+2006-03-30  v0.71
+[!] Fixed crush on playing mp3 with frequency other than 44100Hz
+
+2006-03-30  v0.7
+[o] It's long time since last update, sorry for leaving develop for some personal reason
+[+] Added exit button for 2.00+ firmware(L + R + SELECT)
+[+] Added support for FAT12 system(memstick with size <= 32M) and FAT32 system(4GB MicroHD)
+[!] Fixed mp3 playing with various frequencies
+[!] Increased move speed while pushing cross button on reading image
+[!] Fixed html parsing
+[!] Fixed charset converting
+[!] Fixed some minor bugs
+
+2006-02-20  v0.62
+[!] Fixed string display on vertical mode
+[!] Fixed file opening problem for some special files/directories
+[!] Fixed when paused music, song name not changing while pressing previous/next button
+[!] shows all lowercase filename for short name files now
+
+2006-02-17  v0.6
+[+] Added bilinear function for image zooming(Default switching key: CIRCLE + L, you can specify it in menu)
+[+] Added mp3 play(Press START enter the mp3 menu)
+[!] Fixed crush bug for viewing rotated image
+[!] Fixed crush bug after wakeup PSP from suspend mode
+[!] Fixed string display function
+[!] Fixed file info display
+[!] Fixed bookmark record of files in chm/zip files
+[!] Improved bicubic zoom speed a bit
+
+2006-02-14  v0.52
+[!] Fixed fat16 engine to support long name directory/file
+[!] Changed codes to not use normal c lib for changing directory
+[!] Fixed bug last line problem while changing the appearance of infobar
+[!] Fixed bug english words seperate engine cause decimal/Chinese character seperated
+[!] Now default path is ms0:/ when config file is not set or directory not exists
+
+2006-02-13  v0.5
+[+] Added raw fat16 file access engine to solve the chinese filename display problem
+[+] Added fileinfo display in menu
+[+] Hex viewing mode for files with unknown type
+[+] Added delete file key(Triangle) in file list menu
+[!] Fixed bug that removed last access directory from MS causes crush on start
+[!] Fixed crush bug on changing image while not using scale
+[!] Fixed hotkey modification don't make affect until back to menu
+[!] Fixed unicode charsets conversion
+[!] Fixed html parsing
+
+2006-01-26  v0.4
+[+] Activate USB connection in file list menu, press start to refresh list
+[!] Fixed bug not saving bookmark while use hotkey to change book
+[!] Fixed bug unable to fitting height/width while viewing image
+[!] fixed filename in info bar
+[o] Happy Chinese New Year(Spring Festival)!
+
+2006-01-22  v0.3
+[+] Support manual key configuration
+[+] It won't seperate english words at line ends now
+[!] Modified display of book reading info bar
+[!] Use SJIS213 instead of SJIS208 to support more Japanese characters
+[!] Changed bicubic filter function, hope this solved some problem
+[!] Fixed vertical reading and image rotate problem
+[!] Clean up some codes
+
+2006-01-03  v0.2
+[+] Support bmp, tga
+[+] Support custom scale and rotate
+[+] Support txt files in zip/chm
+[+] Added scrollbar to menu and book reading
+[!] Fixed some bugs and improved speed of image viewing a bit
+
+2005-12-18  v0.1
+[+] Initial public release with a nice gui
+[+] txt/html/jpg/gif/png reading support
+[+] book reading: GBK/BIG5/SJIS/UNICODE support
+[+] image viewing: scale to fit width/height support

@@ -1,0 +1,8 @@
+Great thanks
+============
+Moonlight: fat16 raw reading idea & unicode conversion table
+nj-zero: libmad mp3 playing with various frequencies
+pspchina forum: Discussion about some programming skills
+PSPSDK dev team: their PSPSDK & samples
+iconv dev team: some encode conversion functions
+Open source zlib, minizip, libpng, giflib, tgalib, jpeglib, libmad, libmp3tag
