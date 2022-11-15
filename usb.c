@@ -1,3 +1,7 @@
+#include "config.h"
+
+#ifdef ENABLE_USB
+
 #include <pspkernel.h>
 #include <pspusb.h>
 #include <pspusbstor.h>
@@ -63,3 +67,5 @@ extern bool usb_connectionestablished()
 {
 	return (sceUsbGetState() & PSP_USB_CONNECTION_ESTABLISHED);
 }
+
+#endif

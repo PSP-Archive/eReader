@@ -19,6 +19,46 @@ extern dword utils_dword2string(dword dw, char * dest, dword width)
 	return width;
 }
 
+extern bool utils_string2dword(const char * src, dword * dw)
+{
+	* dw = 0;
+	while(* src >= '0' && * src <= '9')
+	{
+		* dw = * dw * 10 + (* src - '0');
+		src ++;
+	}
+	return (* src == 0);
+}
+
+extern bool utils_string2double(const char * src, double * db)
+{
+	* db = 0.0;
+	bool doted = false;
+	double p = 0.1;
+	while((* src >= '0' && * src <= '9') || * src == '.')
+	{
+		if(* src == '.')
+		{
+			if(doted)
+				return false;
+			else
+				doted = true;
+		}
+		else
+		{
+			if(doted)
+			{
+				* db = * db + p * (* src - '0');
+				p = p / 10;
+			}
+			else
+				* db = * db * 10 + (* src - '0');
+		}
+		src ++;
+	}
+	return (* src == 0);
+}
+
 extern const char * utils_fileext(const char * filename)
 {
 	dword len = strlen(filename);
@@ -30,7 +70,17 @@ extern const char * utils_fileext(const char * filename)
 		return NULL;
 }
 
-extern void utils_del_dir(char * dir)
+extern void utils_del_file(const char * file)
+{
+	SceIoStat stat;
+	memset(&stat, 0, sizeof(SceIoStat));
+	sceIoGetstat(file, &stat);
+	stat.st_attr &= ~0x0F;
+	sceIoChstat(file, &stat, 3);
+	sceIoRemove(file);
+}
+
+extern void utils_del_dir(const char * dir)
 {
 	int dl = sceIoDopen(dir);
 	if(dl < 0)
@@ -39,15 +89,15 @@ extern void utils_del_dir(char * dir)
 	memset(&sid, 0, sizeof(SceIoDirent));
 	while(sceIoDread(dl, &sid))
 	{
-		if(sid.d_name[0] == '.') continue; // hide file
+		if(sid.d_name[0] == '.') continue;
 		char compPath[260];
 		sprintf(compPath, "%s/%s", dir, sid.d_name);
-		if(FIO_S_ISDIR(sid.d_stat.st_mode)) // dir
+		if(FIO_S_ISDIR(sid.d_stat.st_mode))
 		{
 			utils_del_dir(compPath);
 			continue;
 		}
-		sceIoRemove(compPath);
+		utils_del_file(compPath);
 		memset(&sid, 0, sizeof(SceIoDirent));
 	}
 	sceIoDclose(dl);

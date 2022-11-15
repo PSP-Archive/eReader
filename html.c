@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include <stdio.h>
 #include <string.h>
 #include "html.h"
@@ -10,14 +12,15 @@ static char * html_skip_spaces(char * string)
 	return res;
 }
 
-static char * html_find_next_tag(char * string, char ** tag, bool * istag)
+static char * html_find_next_tag(char * string, char ** tag, char ** property, bool * istag, bool stripeol)
 {
 	char * res = string;
 	bool inquote = false;
 	char quote = ' ';
+	*property = NULL;
 	while(*res != 0 && *res != '<' && *res != '&')
 	{
-		if(*res == ' ' || *res == '\t' || *res == '\r' || *res == '\n')
+		if(stripeol && (*res == ' ' || *res == '\t' || *res == '\r' || *res == '\n'))
 		{
 			if(res > string && *(res - 1) == ' ')
 				*res = 0x1F;
@@ -44,10 +47,18 @@ static char * html_find_next_tag(char * string, char ** tag, bool * istag)
 				}
 				else if(quote == *res)
 					inquote = false;
+				res ++;
 			}
-			if(!inquote && (*res == ' ' || *res == '\t' || *res == '\r' || *res == '\n'))
+			else if(!inquote && (*res == ' ' || *res == '\t' || *res == '\r' || *res == '\n'))
+			{
 				*res = 0;
-			res ++;
+				res ++;
+				res = html_skip_spaces(res);
+				if(*res != '>')
+					*property = res;
+			}
+			else
+				res ++;
 		}
 		if(*res == 0)
 			return NULL;
@@ -59,11 +70,14 @@ static char * html_find_next_tag(char * string, char ** tag, bool * istag)
 	{
 		*res++ = 0;
 		*tag = res;
-		while(*res != 0 && *res != ';')
+		while(*res != 0 && *res != ' ' && *res != ';' && *res != '<' && *res != '&')
 			res ++;
 		if(*res == 0)
 			return NULL;
-		*res++ = 0;
+		if(*res == ' ' || *res == ';')
+			*res++ = 0;
+		else
+			*(res - 1) = 0;
 		*istag = false;
 	}
 	return res;
@@ -94,24 +108,29 @@ static char * html_skip_close_tag(char * string, char * tag)
 	return res;
 }
 
-extern dword html_to_text(char * string)
+extern dword html_to_text(char * string, dword size, bool stripeol)
 {
-	char * nstr, * ntag, * cstr = string, * str = string;
+	char * nstr, * ntag, * cstr = string, * str = string, * prop;
 	bool istag;
-	while(str != NULL && (nstr = html_find_next_tag(str, &ntag, &istag)) != NULL)
+	if(size > 0)
 	{
-		if(str != cstr)
+		char * cur, * end;
+		for(cur = string, end = cur + size; cur < end; cur ++)
+			if(* cur == 0)
+				* cur = 1;
+	}
+	while(str != NULL && (nstr = html_find_next_tag(str, &ntag, &prop, &istag, stripeol)) != NULL)
+	{
+		int len = (int)ntag - (int)str - 1;
+		if(len > 0)
 		{
-			int len = (int)ntag - (int)str - 1;
-			if(len > 0)
-			{
+			if(str != cstr)
 				strncpy(cstr, str, len);
-				cstr += len;
-			}
+			cstr += len;
 		}
 		if(istag)
 		{
-			if(strcasecmp(ntag, "head") == 0 || strcasecmp(ntag, "style") == 0 || strcasecmp(ntag, "title") == 0)
+			if(stricmp(ntag, "head") == 0 || stricmp(ntag, "style") == 0 || stricmp(ntag, "title") == 0)
 			{
 				char * pstr = html_skip_close_tag(nstr, ntag);
 				if(pstr != NULL)
@@ -119,7 +138,7 @@ extern dword html_to_text(char * string)
 				else
 					str = nstr;
 			}
-			else if(strcasecmp(ntag, "script") == 0)
+			else if(stricmp(ntag, "script") == 0)
 			{
 				char * kstr = nstr;
 				str = html_skip_close_tag(nstr, ntag);
@@ -140,34 +159,91 @@ extern dword html_to_text(char * string)
 						{
 							strncpy(cstr, kstr, dstr - kstr);
 							cstr[dstr - kstr] = 0;
-							cstr += html_to_text(cstr);
+							cstr += html_to_text(cstr, 0, true);
 						}
 						kstr = dstr;
 					}
 				}
 			}
+			else if(stricmp(ntag, "pre") == 0)
+			{
+				char * pstr = html_skip_close_tag(nstr, "pre");
+				if(pstr != NULL)
+				{
+					len = pstr - nstr - 6;
+					strncpy(cstr, nstr, len);
+					cstr += html_to_text(cstr, 0, false);
+				}
+				str = pstr;
+			}
 			else
 			{
-				if(strcasecmp(ntag, "br") == 0 || strcasecmp(ntag, "li") == 0 || strcasecmp(ntag, "p") == 0 || strcasecmp(ntag, "/p") == 0 || strcasecmp(ntag, "tr") == 0 || strcasecmp(ntag, "/table") == 0 || strcasecmp(ntag, "div") == 0 || strcasecmp(ntag, "/div") == 0)
-					*cstr ++ = '\n';
-				else if(strcasecmp(ntag, "th") == 0 || strcasecmp(ntag, "td") == 0)
+				if(stricmp(ntag, "br") == 0 || stricmp(ntag, "li") == 0 || stricmp(ntag, "p") == 0 || stricmp(ntag, "/p") == 0 || stricmp(ntag, "tr") == 0 || stricmp(ntag, "/table") == 0 || stricmp(ntag, "div") == 0 || stricmp(ntag, "/div") == 0)
+				{
+					if(prop != NULL)
+					{
+						char * v = strchr(prop, '=');
+						if(v == NULL)
+							*cstr ++ = '\n';
+						else
+						{
+							char * t = v - 1;
+							*v = 0;
+							while(t > prop && (*t == ' ' || *t == '\t' || *t == '\r' || *t == '\n')) t --;
+							*(t + 1) = 0;
+							if(stricmp(prop, "style") == 0)
+							{
+								v ++;
+								v = html_skip_spaces(v);
+								if(*v == '"' || * v == '\'')
+								{
+									char * rq = strchr(v + 1, *v);
+									if(rq == NULL)
+									{
+										*cstr ++ = '\n';
+										v = NULL;
+									}
+									else
+									{
+										*rq = 0;
+										v ++;
+									}
+								}
+								if(v != NULL)
+								{
+									if(stricmp(v, "display:none") != 0)
+										*cstr ++ = '\n';
+									else
+									{
+										char * pstr = html_skip_close_tag(nstr, ntag);
+										if(pstr != NULL)
+											nstr = pstr;
+									}
+								}
+							}
+						}
+					}
+					else
+						*cstr ++ = '\n';
+				}
+				else if(stricmp(ntag, "th") == 0 || stricmp(ntag, "td") == 0)
 					*cstr ++ = ' ';
 				str = nstr;
 			}
 		}
 		else
 		{
-			if(strcasecmp(ntag, "nbsp") == 0)
+			if(stricmp(ntag, "nbsp") == 0)
 				*cstr ++ = ' ';
-			else if(strcasecmp(ntag, "gt") == 0)
+			else if(stricmp(ntag, "gt") == 0)
 				*cstr ++ = '>';
-			else if(strcasecmp(ntag, "lt") == 0)
+			else if(stricmp(ntag, "lt") == 0)
 				*cstr ++ = '<';
-			else if(strcasecmp(ntag, "amp") == 0)
+			else if(stricmp(ntag, "amp") == 0)
 				*cstr ++ = '&';
-			else if(strcasecmp(ntag, "quote") == 0)
+			else if(stricmp(ntag, "quote") == 0)
 				*cstr ++ = '\'';
-			else if(strcasecmp(ntag, "copy") == 0)
+			else if(stricmp(ntag, "copy") == 0)
 			{
 				*cstr ++ = '(';
 				*cstr ++ = 'C';
@@ -176,7 +252,8 @@ extern dword html_to_text(char * string)
 			str = nstr;
 		}
 	}
+	int slen = strlen(str);
 	strcpy(cstr, str);
-	cstr += strlen(str);
+	cstr += slen;
 	return cstr - string;
 }

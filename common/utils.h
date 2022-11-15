@@ -4,7 +4,10 @@
 #include "datatype.h"
 
 extern dword utils_dword2string(dword dw, char * dest, dword width);
+extern bool utils_string2dword(const char * src, dword * dw);
+extern bool utils_string2double(const char * src, double * db);
 extern const char * utils_fileext(const char * filename);
-extern void utils_del_dir(char * dir);
+extern void utils_del_file(const char * file);
+extern void utils_del_dir(const char * dir);
 
 #endif

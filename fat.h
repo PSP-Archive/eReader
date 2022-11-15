@@ -34,12 +34,25 @@ struct _fat_dbr {
 	word heads;
 	dword hidd_sec;
 	dword big_total_sec;
-	byte drv_num;
-	byte reserved;
-	byte boot_sig;
-	byte vol_id[4];
-	char vol_lab[11];
-	char file_sys_type[8];
+	union {
+		struct {
+			byte drv_num;
+			byte reserved;
+			byte boot_sig;
+			byte vol_id[4];
+			char vol_lab[11];
+			char file_sys_type[8];
+		} __attribute__((packed)) fat16;
+		struct {
+			dword sec_per_fat;
+			word extend_flag;
+			word sys_ver;
+			dword root_clus;
+			word info_sec;
+			word back_sec;
+			byte reserved[10];
+		} __attribute__((packed)) fat32;
+	} __attribute__((packed)) ufat;
 	byte exe_code[448];
 	word ending_flag;
 } __attribute__((packed));
@@ -93,13 +106,13 @@ typedef struct {
 	word ctime;
 	word mdate;
 	word mtime;
-	word clus;
+	dword clus;
 	byte attr;
-} t_fat_info, * p_fat_info;
+} __attribute__((aligned(16)))t_fat_info, * p_fat_info;
 
 extern bool fat_init();
-extern dword fat_readdir(const char * dir, const char * sdir, p_fat_info * info);
-extern dword fat_dir_clus(const char * dir);
+extern bool fat_locate(const char * name, char * sname, dword clus, p_fat_entry info);
+extern dword fat_readdir(const char * dir, char * sdir, p_fat_info * info);
 extern void fat_free();
 
 #endif

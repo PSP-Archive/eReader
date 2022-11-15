@@ -3,16 +3,20 @@
 
 #include "common/datatype.h"
 
-typedef struct {
-	char filename[256];
+struct _bookmark {
 	dword row[10];
-} t_bookmark, * p_bookmark;
+	dword index, hash;
+} __attribute__((packed));
+typedef struct _bookmark t_bookmark, * p_bookmark;
 
-extern void bookmark_setbasedir(const char * dir);
+extern void bookmark_init(const char * fn);
 extern p_bookmark bookmark_open(const char * filename);
 extern void bookmark_save(p_bookmark bm);
+extern void bookmark_delete(p_bookmark bm);
 extern void bookmark_close(p_bookmark bm);
 extern dword bookmark_autoload(const char * filename);
 extern void bookmark_autosave(const char * filename, dword row);
+extern bool bookmark_export(p_bookmark bm, const char * filename);
+extern bool bookmark_import(const char * filename);
 
 #endif

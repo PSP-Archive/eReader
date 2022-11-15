@@ -1,11 +1,17 @@
+#include "config.h"
+
+#if defined(ENABLE_IMAGE) || defined(ENABLE_BG)
+
 #include <stdio.h>
 #include <stdlib.h>
-#include "lib/png.h"
-#include "lib/gif_lib.h"
-#include "lib/jpeglib.h"
-#include "lib/bmplib.h"
-#include "lib/tga.h"
-#include "display.h"
+#include <png.h>
+#include <gif_lib.h>
+#include <jpeglib.h>
+#include <bmplib.h>
+#include <tga.h>
+#include <chm_lib.h>
+#include <unzip.h>
+#include <unrar.h>
 #include "image.h"
 
 /* 
@@ -80,33 +86,32 @@ __inline float sinc_2(float x)
 	return (2.0f - x) * (2.0f - x) * (1.0f - x);
 }
 
-__inline dword bicubic(dword i1, dword i2, dword i3, dword i4, float u1, float u2, float u3, float u4)
+__inline pixel bicubic(pixel i1, pixel i2, pixel i3, pixel i4, float u1, float u2, float u3, float u4)
 {
 	int r, g, b;
 	r = u1 * RGB_R(i1) + u2 * RGB_R(i2) + u3 * RGB_R(i3) + u4 * RGB_R(i4) + 0.5f;
-	if(r > 255) r = 255;
+	if(r > COLOR_MAX) r = COLOR_MAX;
 	else if(r < 0) r = 0;
 
 	g = u1 * RGB_G(i1) + u2 * RGB_G(i2) + u3 * RGB_G(i3) + u4 * RGB_G(i4) + 0.5f;
-	if(g > 255) g = 255;
+	if(g > COLOR_MAX) g = COLOR_MAX;
 	else if(g < 0) g = 0;
 
 	b = u1 * RGB_B(i1) + u2 * RGB_B(i2) + u3 * RGB_B(i3) + u4 * RGB_B(i4) + 0.5f;
-	if(b > 255) b = 255;
+	if(b > COLOR_MAX) b = COLOR_MAX;
 	else if(b < 0) b = 0;
 
-	return RGB(r, g, b);
+	return RGB2(r, g, b);
 }
 
-extern void image_zoom_bicubic(dword * src, int srcwidth, int srcheight, dword * dest, int destwidth, int destheight)
+extern void image_zoom_bicubic(pixel * src, int srcwidth, int srcheight, pixel * dest, int destwidth, int destheight)
 {
-	dword * temp1, * temp2, * temp3, * temp4, * tempdst;
+	pixel * temp1, * temp2, * temp3, * temp4, * tempdst;
 	float u, v, u1[destwidth], u2[destwidth], u3[destwidth], u4[destwidth];
 	int x = 0, y, x2, y1, y2, y3, y4, i, j;
 
 	for(i = 0; i < destheight; i ++)
 	{
-		x += srcheight;
 		x2 = x / destheight;
 		temp2 = src + x2 * srcwidth;
 		if(x2 == 0) temp1 = temp2; else temp1 = temp2 - srcwidth;
@@ -120,7 +125,7 @@ extern void image_zoom_bicubic(dword * src, int srcwidth, int srcheight, dword *
 		}
 		tempdst = dest;
 
-		v = ((float)(x - x2 * destheight)) / destheight;
+		v = ((float)x / destheight) - x2;
 		float v1 = sinc_2(v + 1.0f), v2 = sinc_1(v), v3 = sinc_n1(v - 1.0f), v4 = sinc_n2(v - 2.0f);
 		y = 0;
 
@@ -128,7 +133,6 @@ extern void image_zoom_bicubic(dword * src, int srcwidth, int srcheight, dword *
 		{
 			for(j = 0; j < destwidth; j ++)
 			{
-				y += srcwidth;
 				y2 = y / destwidth;
 				y1 = y2 - 1;
 				y3 = y2 + 1;
@@ -140,13 +144,13 @@ extern void image_zoom_bicubic(dword * src, int srcwidth, int srcheight, dword *
 				u = ((float)y / destwidth) - y2;
 				u1[j] = sinc_2(u + 1.0f), u2[j] = sinc_1(u), u3[j] = sinc_n1(u - 1.0f), u4[j] = sinc_n2(u - 2.0f);
 				tempdst[j] = bicubic(bicubic(temp1[y1], temp1[y2], temp1[y3], temp1[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp2[y1], temp2[y2], temp2[y3], temp2[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp3[y1], temp3[y2], temp3[y3], temp3[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp4[y1], temp4[y2], temp4[y3], temp4[y4], u1[j], u2[j], u3[j], u4[j]), v1, v2, v3, v4);
+				y += srcwidth;
 			}
 		}
 		else
 		{
 			for(j = 0; j < destwidth; j ++)
 			{
-				y += srcwidth;
 				y2 = y / destwidth;
 				y1 = y2 - 1;
 				y3 = y2 + 1;
@@ -156,35 +160,38 @@ extern void image_zoom_bicubic(dword * src, int srcwidth, int srcheight, dword *
 				if(y4 > srcwidth - 1) y4 = srcwidth - 1;
 
 				tempdst[j] = bicubic(bicubic(temp1[y1], temp1[y2], temp1[y3], temp1[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp2[y1], temp2[y2], temp2[y3], temp2[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp3[y1], temp3[y2], temp3[y3], temp3[y4], u1[j], u2[j], u3[j], u4[j]), bicubic(temp4[y1], temp4[y2], temp4[y3], temp4[y4], u1[j], u2[j], u3[j], u4[j]), v1, v2, v3, v4);
+				y += srcwidth;
 			}
 		}
 		dest += destwidth;
+		x += srcheight;
 	}
 } 
 
-__inline dword bilinear(dword i1, dword i2, int u, int s)
+__inline pixel bilinear(pixel i1, pixel i2, int u, int s)
 {
 	int r1, g1, b1, r2, g2, b2;
 	r1 = RGB_R(i1); g1 = RGB_G(i1); b1 = RGB_B(i1);
 	r2 = RGB_R(i2); g2 = RGB_G(i2); b2 = RGB_B(i2);
-	return RGB((r1 + u * (r2 - r1) / s), (g1 + u * (g2 - g1) / s), (b1 + u * (b2 - b1) / s));
+	return RGB2((r1 + u * (r2 - r1) / s), (g1 + u * (g2 - g1) / s), (b1 + u * (b2 - b1) / s));
 }
 
-extern void image_zoom_bilinear(dword * src, int srcwidth, int srcheight, dword * dest, int destwidth, int destheight)
+extern void image_zoom_bilinear(pixel * src, int srcwidth, int srcheight, pixel * dest, int destwidth, int destheight)
 {
-	dword * temp1, * temp2, * tempdst;
+	pixel * temp1, * temp2, * tempdst;
 	int x = 0, y, u, v;
 	int x2, y1, y2, i, j;
 
 	for(i = 0; i < destheight; i ++)
 	{
-		x += srcheight;
 		x2 = x / destheight;
-		temp1 = src + x2 * srcwidth;
 		if(x2 < srcheight - 1)
+		{
+			temp1 = src + x2 * srcwidth;
 			temp2 = temp1 + srcwidth;
+		}
 		else
-			temp2 = temp1;
+			temp1 = temp2 = src + x2 * (srcheight - 1);
 		tempdst = dest;
 
 		v = x - x2 * destheight;
@@ -192,21 +199,22 @@ extern void image_zoom_bilinear(dword * src, int srcwidth, int srcheight, dword 
 
 		for(j = 0; j < destwidth; j ++)
 		{
-			y += srcwidth;
 			y1 = y / destwidth;
 			if(y1 < srcwidth - 1)
-				y2 = y1;
-			else
 				y2 = y1 + 1;
+			else
+				y2 = y1 = srcwidth - 1;
 
 			u = y - y1 * destwidth;
 			tempdst[j] = bilinear(bilinear(temp1[y1], temp1[y2], u, destwidth), bilinear(temp2[y1], temp2[y2], u, destwidth), v, destheight);
+			y += srcwidth;
 		}
 		dest += destwidth;
+		x += srcheight;
 	}
 } 
 
-extern void image_rotate(dword * imgdata, dword * pwidth, dword * pheight, dword organgle, dword newangle)
+extern void image_rotate(pixel * imgdata, dword * pwidth, dword * pheight, dword organgle, dword newangle)
 {
 	dword ca;
 	int temp;
@@ -218,7 +226,7 @@ extern void image_rotate(dword * imgdata, dword * pwidth, dword * pheight, dword
 		ca = newangle - organgle;
 	if(ca == 0)
 		return;
-	dword * newdata = malloc(sizeof(dword) * *pwidth * *pheight);
+	pixel * newdata = malloc(sizeof(pixel) * *pwidth * *pheight);
 	if(newdata == NULL)
 		return;
 	dword i, j;
@@ -244,25 +252,140 @@ extern void image_rotate(dword * imgdata, dword * pwidth, dword * pheight, dword
 	default:
 		return;
 	}
-	memcpy(imgdata, newdata, sizeof(dword) * *pwidth * *pheight);
+	memcpy(imgdata, newdata, sizeof(pixel) * *pwidth * *pheight);
 	free((void *)newdata);
 }
+
+static unsigned image_zip_fread(void *buf, unsigned r, unsigned n, void *stream)
+{
+	int size = unzReadCurrentFile((unzFile)stream, buf, r * n);
+	if (size < 0)
+		return 0;
+	else
+		return n;
+}
+
+static int image_zip_fseek(void *stream, long offset, int origin)
+{
+	if(origin != SEEK_SET)
+		return 0;
+	int size = offset - unztell((unzFile)stream);
+	if(size <= 0)
+		return 0;
+	byte buf[size];
+	unzReadCurrentFile((unzFile)stream, buf, size);
+	return 0;
+}
+
+static long image_zip_ftell(void *stream)
+{
+	return unztell((unzFile)stream);
+}
+
+typedef struct {
+	struct chmFile * chm;
+	struct chmUnitInfo ui;
+	LONGUINT64 readpos;
+} t_image_chm, * p_image_chm;
+
+static unsigned image_chm_fread(void *buf, unsigned r, unsigned n, void *stream)
+{
+	LONGINT64 readsize = chm_retrieve_object(((p_image_chm)stream)->chm, &((p_image_chm)stream)->ui, buf, ((p_image_chm)stream)->readpos, r * n);
+	if(readsize < 0)
+		readsize = 0;
+	((p_image_chm)stream)->readpos += readsize;
+	return n;
+}
+
+static int image_chm_fseek(void *stream, long offset, int origin)
+{
+	if(origin != SEEK_SET)
+		return 0;
+	((p_image_chm)stream)->readpos = offset;
+	return 0;
+}
+
+static long image_chm_ftell(void *stream)
+{
+	return ((p_image_chm)stream)->readpos;
+}
+
+typedef struct {
+	int idx, size;
+	byte * buf;
+} t_image_rar, * p_image_rar;
+
+static int imagerarcbproc(UINT msg,LONG UserData,LONG P1,LONG P2)
+{
+	if(msg == UCM_PROCESSDATA)
+	{
+		p_image_rar irar = (p_image_rar)UserData;
+		if(P2 > irar->size - irar->idx)
+		{
+			memcpy(&irar->buf[irar->idx], (void *)P1, irar->size - irar->idx);
+			return -1;
+		}
+		memcpy(&irar->buf[irar->idx], (void *)P1, P2);
+		irar->idx += P2;
+	}
+	return 0;
+}
+
+static unsigned image_rar_fread(void *buf, unsigned r, unsigned n, void *stream)
+{
+	p_image_rar irar = (p_image_rar)stream;
+	if(r * n > irar->size - irar->idx)
+	{
+		memcpy(buf, &irar->buf[irar->idx], irar->size - irar->idx);
+		irar->idx = irar->size;
+		return n;
+	}
+	memcpy(buf, &irar->buf[irar->idx], r * n);
+	irar->idx += (r * n);
+	return n;
+}
+
+static int image_rar_fseek(void *stream, long offset, int origin)
+{
+	p_image_rar irar = (p_image_rar)stream;
+	if(origin == SEEK_SET)
+	{
+		if(offset < 0)
+			offset = 0;
+		irar->idx = min(offset, irar->size);
+	}
+	else if(origin == SEEK_CUR)
+	{
+		if(offset + irar->idx < 0)
+			offset = -irar->idx;
+		irar->idx = min(offset + irar->idx, irar->size);
+	}
+	else
+	{
+		if(offset + irar->idx < 0)
+			offset = -irar->idx;
+		irar->idx = min(offset + irar->size, irar->size);
+	}
+	return 0;
+}
+
+static long image_rar_ftell(void *stream)
+{
+	return ((p_image_rar)stream)->idx;
+}
+
 
 /* PNG processing */
 
 /* return value = 0 for success, 1 for bad sig/hdr, 4 for no mem
 display_exponent == LUT_exponent * CRT_exponent */
 
-static int image_readpng2(FILE *infile, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+static int image_readpng2(void *infile, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor, png_rw_ptr read_fn)
 {
 	png_structp png_ptr = NULL;
 	png_infop info_ptr = NULL;
 
 	byte sig[8];
-
-	fread(sig, 1, 8, infile);
-	if (!png_check_sig(sig, 8))
-		return 1;
 
 	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (!png_ptr)
@@ -281,7 +404,14 @@ static int image_readpng2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 	}
 
 
-	png_init_io(png_ptr, infile);
+	png_set_read_fn(png_ptr, infile, read_fn);
+
+	read_fn(png_ptr, sig, 8);
+	if (!png_check_sig(sig, 8))
+	{
+		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+		return 1;
+	}
 	png_set_sig_bytes(png_ptr, 8);
 
 	png_read_png(png_ptr, info_ptr, PNG_TRANSFORM_STRIP_16 | PNG_TRANSFORM_PACKING | PNG_TRANSFORM_EXPAND | PNG_TRANSFORM_BGR, NULL);
@@ -302,7 +432,7 @@ static int image_readpng2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 		*bgcolor = RGB(info_ptr->background.red, info_ptr->background.green, info_ptr->background.blue);
 	}
 
-	if((*image_data = (dword *)malloc(sizeof(dword) * info_ptr->width * info_ptr->height)) == NULL)
+	if((*image_data = (pixel *)malloc(sizeof(pixel) * info_ptr->width * info_ptr->height)) == NULL)
 	{
 		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 		return 4;
@@ -311,7 +441,7 @@ static int image_readpng2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 	png_byte **prowtable = info_ptr->row_pointers;
 	dword x, y;
 	byte r=0, g=0, b=0;
-	dword * imgdata = * image_data;
+	pixel * imgdata = * image_data;
 	switch(info_ptr->color_type){
 	case PNG_COLOR_TYPE_GRAY:
 		for (y = 0; y < info_ptr->height; y ++){
@@ -364,17 +494,115 @@ static int image_readpng2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 	return 0;
 }
 
-extern int image_readpng(const char * filename, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+static void image_png_read(png_structp png, png_bytep buf, png_size_t size)
+{
+	png_size_t check = fread(buf, 1, size, png->io_ptr);
+	if (check != size)
+		png_error(png, "Read Error");
+}
+
+static void image_png_zip_read(png_structp png, png_bytep buf, png_size_t size)
+{
+	png_size_t check = image_zip_fread(buf, 1, size, png->io_ptr);
+	if (check != size)
+		png_error(png, "Read Error");
+}
+
+static void image_png_chm_read(png_structp png, png_bytep buf, png_size_t size)
+{
+	png_size_t check = image_chm_fread(buf, 1, size, png->io_ptr);
+	if (check != size)
+		png_error(png, "Read Error");
+}
+
+static void image_png_rar_read(png_structp png, png_bytep buf, png_size_t size)
+{
+	png_size_t check = image_rar_fread(buf, 1, size, png->io_ptr);
+	if (check != size)
+		png_error(png, "Read Error");
+}
+
+extern int image_readpng(const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
 {
 	FILE * fp = fopen(filename, "rb");
 	if(fp == NULL)
 		return -1;
-	int result = image_readpng2(fp, pwidth, pheight, image_data, bgcolor);
+	int result = image_readpng2(fp, pwidth, pheight, image_data, bgcolor, image_png_read);
 	fclose(fp);
 	return result;
 }
 
-extern int image_readgif(const char * filename, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+extern int image_readpng_in_zip(const char * zipfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	unzFile unzf = unzOpen(zipfile);
+	if(unzf == NULL)
+		return -1;
+	if(unzLocateFile(unzf, filename, 0) != UNZ_OK || unzOpenCurrentFile(unzf) != UNZ_OK)
+	{
+		unzClose(unzf);
+		return -1;
+	}
+	int result = image_readpng2((void *)unzf, pwidth, pheight, image_data, bgcolor, image_png_zip_read);
+	unzCloseCurrentFile(unzf);
+	unzClose(unzf);
+	return result;
+}
+
+extern int image_readpng_in_chm(const char * chmfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_chm chm;
+	chm.chm = chm_open(chmfile);
+	if(chm.chm == NULL)
+		return -1;
+    if (chm_resolve_object(chm.chm, filename, &chm.ui) != CHM_RESOLVE_SUCCESS)
+	{
+		chm_close(chm.chm);
+		return -1;
+	}
+	chm.readpos = 0;
+	int result = image_readpng2((void *)&chm, pwidth, pheight, image_data, bgcolor, image_png_chm_read);
+	chm_close(chm.chm);
+	return result;
+}
+
+extern int image_readpng_in_rar(const char * rarfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_rar rar;
+	struct RAROpenArchiveData arcdata;
+	arcdata.ArcName = (char *)rarfile;
+	arcdata.OpenMode = RAR_OM_EXTRACT;
+	arcdata.CmtBuf = NULL;
+	arcdata.CmtBufSize = 0;
+	HANDLE hrar = RAROpenArchive(&arcdata);
+	if(hrar == NULL)
+		return -1;
+	RARSetCallback(hrar, imagerarcbproc, (LONG)&rar);
+	do {
+		struct RARHeaderData header;
+		if(RARReadHeader(hrar, &header) != 0)
+			break;
+		if(stricmp(header.FileName, filename) == 0)
+		{
+			rar.size = header.UnpSize;
+			rar.idx = 0;
+			int e;
+			if((rar.buf = (byte *)calloc(1, rar.size)) == NULL || (e = RARProcessFile(hrar, RAR_TEST, NULL, NULL)) != 0)
+			{
+				RARCloseArchive(hrar);
+				return -1;
+			}
+			RARCloseArchive(hrar);
+			rar.idx = 0;
+			int result = image_readpng2((void *)&rar, pwidth, pheight, image_data, bgcolor, image_png_rar_read);
+			free((void *)rar.buf);
+			return result;
+		}
+	} while(RARProcessFile(hrar, RAR_SKIP, NULL, NULL) == 0);
+	RARCloseArchive(hrar);
+	return -1;
+}
+
+static int image_readgif2(void * handle, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor, InputFunc readFunc)
 {
 #define gif_color(c) RGB(palette->Colors[c].Red, palette->Colors[c].Green, palette->Colors[c].Blue)
 	GifRecordType RecordType;
@@ -384,7 +612,7 @@ extern int image_readgif(const char * filename, dword *pwidth, dword *pheight, d
 	ColorMapObject *palette;
 	int ExtCode;
 	dword i, j;
-	if ((GifFileIn = DGifOpenFileName(filename)) == NULL)
+	if ((GifFileIn = DGifOpen(handle, readFunc)) == NULL)
 		return 1;
 	*bgcolor = 0;
 	*pwidth = 0;
@@ -418,13 +646,13 @@ extern int image_readgif(const char * filename, dword *pwidth, dword *pheight, d
 					DGifCloseFile(GifFileIn);
 					return 1;
 				}
-				if((*image_data = (dword *)malloc(sizeof(dword) * GifFileIn->Image.Width * GifFileIn->Image.Height)) == NULL)
+				if((*image_data = (pixel *)malloc(sizeof(pixel) * GifFileIn->Image.Width * GifFileIn->Image.Height)) == NULL)
 				{
 					free((void *)LineIn);
 					DGifCloseFile(GifFileIn);
 					return 1;
 				}
-				dword * imgdata = *image_data;
+				pixel * imgdata = *image_data;
 				for (i = 0; i < GifFileIn->Image.Height; i ++) {
 					if (DGifGetLine(GifFileIn, LineIn, GifFileIn->Image.Width) == GIF_ERROR)
 					{
@@ -474,6 +702,106 @@ extern int image_readgif(const char * filename, dword *pwidth, dword *pheight, d
 	return 0;
 }
 
+static int image_gif_read(GifFileType * ft, GifByteType * buf, int size)
+{
+	return fread(buf, 1, size, (FILE *)ft->UserData);
+}
+
+static int image_gif_zip_read(GifFileType * ft, GifByteType * buf, int size)
+{
+	return image_zip_fread(buf, 1, size, (FILE *)ft->UserData);
+}
+
+static int image_gif_chm_read(GifFileType * ft, GifByteType * buf, int size)
+{
+	return image_chm_fread(buf, 1, size, (FILE *)ft->UserData);
+}
+
+static int image_gif_rar_read(GifFileType * ft, GifByteType * buf, int size)
+{
+	return image_rar_fread(buf, 1, size, (FILE *)ft->UserData);
+}
+
+extern int image_readgif(const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	FILE * fp = fopen(filename, "rb");
+	if(fp == NULL)
+		return -1;
+	int result = image_readgif2(fp, pwidth, pheight, image_data, bgcolor, image_gif_read);
+	fclose(fp);
+	return result;
+}
+
+extern int image_readgif_in_zip(const char * zipfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	unzFile unzf = unzOpen(zipfile);
+	if(unzf == NULL)
+		return -1;
+	if(unzLocateFile(unzf, filename, 0) != UNZ_OK || unzOpenCurrentFile(unzf) != UNZ_OK)
+	{
+		unzClose(unzf);
+		return -1;
+	}
+	int result = image_readgif2((void *)unzf, pwidth, pheight, image_data, bgcolor, image_gif_zip_read);
+	unzCloseCurrentFile(unzf);
+	unzClose(unzf);
+	return result;
+}
+
+extern int image_readgif_in_chm(const char * chmfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_chm chm;
+	chm.chm = chm_open(chmfile);
+	if(chm.chm == NULL)
+		return -1;
+    if (chm_resolve_object(chm.chm, filename, &chm.ui) != CHM_RESOLVE_SUCCESS)
+	{
+		chm_close(chm.chm);
+		return -1;
+	}
+	chm.readpos = 0;
+	int result = image_readgif2((void *)&chm, pwidth, pheight, image_data, bgcolor, image_gif_chm_read);
+	chm_close(chm.chm);
+	return result;
+}
+
+extern int image_readgif_in_rar(const char * rarfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_rar rar;
+	struct RAROpenArchiveData arcdata;
+	arcdata.ArcName = (char *)rarfile;
+	arcdata.OpenMode = RAR_OM_EXTRACT;
+	arcdata.CmtBuf = NULL;
+	arcdata.CmtBufSize = 0;
+	HANDLE hrar = RAROpenArchive(&arcdata);
+	if(hrar == NULL)
+		return -1;
+	RARSetCallback(hrar, imagerarcbproc, (LONG)&rar);
+	do {
+		struct RARHeaderData header;
+		if(RARReadHeader(hrar, &header) != 0)
+			break;
+		if(stricmp(header.FileName, filename) == 0)
+		{
+			rar.size = header.UnpSize;
+			rar.idx = 0;
+			int e;
+			if((rar.buf = (byte *)calloc(1, rar.size)) == NULL || (e = RARProcessFile(hrar, RAR_TEST, NULL, NULL)) != 0)
+			{
+				RARCloseArchive(hrar);
+				return -1;
+			}
+			RARCloseArchive(hrar);
+			rar.idx = 0;
+			int result = image_readgif2((void *)&rar, pwidth, pheight, image_data, bgcolor, image_gif_rar_read);
+			free((void *)rar.buf);
+			return result;
+		}
+	} while(RARProcessFile(hrar, RAR_SKIP, NULL, NULL) == 0);
+	RARCloseArchive(hrar);
+	return -1;
+}
+
 static void my_error_exit(j_common_ptr cinfo)
 {
 }
@@ -482,7 +810,7 @@ static void output_no_message(j_common_ptr cinfo)
 {
 }
 
-static int image_readjpg2(FILE *infile, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+static int image_readjpg2(FILE *infile, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor, jpeg_fread jfread)
 {
 	struct jpeg_decompress_struct cinfo;
 	struct jpeg_error_mgr jerr;
@@ -492,7 +820,7 @@ static int image_readjpg2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 	jerr.error_exit = my_error_exit;
 	jerr.output_message = output_no_message;
 	jpeg_create_decompress(&cinfo);
-	jpeg_stdio_src(&cinfo, infile);
+	jpeg_stdio_src(&cinfo, infile, jfread);
 	if(jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
 	{
 		jpeg_destroy_decompress(&cinfo);
@@ -518,14 +846,14 @@ static int image_readjpg2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 		jpeg_destroy_decompress(&cinfo);
 		return 1;
 	}
-	if((*image_data = (dword *)malloc(sizeof(dword) * cinfo.output_width * cinfo.output_height)) == NULL)
+	if((*image_data = (pixel *)malloc(sizeof(pixel) * cinfo.output_width * cinfo.output_height)) == NULL)
 	{
 		free((void *)sline);
 		jpeg_abort_decompress(&cinfo);
 		jpeg_destroy_decompress(&cinfo);
 		return 1;
 	}
-	dword * imgdata = *image_data;
+	pixel * imgdata = *image_data;
 	while(cinfo.output_scanline < cinfo.output_height)
 	{
 		int i;
@@ -539,26 +867,96 @@ static int image_readjpg2(FILE *infile, dword *pwidth, dword *pheight, dword ** 
 	return 0;
 }
 
-extern int image_readjpg(const char * filename, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+extern int image_readjpg(const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
 {
 	FILE * fp = fopen(filename, "rb");
 	if(fp == NULL)
 		return -1;
-	int result = image_readjpg2(fp, pwidth, pheight, image_data, bgcolor);
+	int result = image_readjpg2(fp, pwidth, pheight, image_data, bgcolor, NULL);
 	fclose(fp);
 	return result;
 }
 
-static int image_bmp_to_32color( DIB dib, dword * width, dword * height, dword ** imgdata)  {
+extern int image_readjpg_in_zip(const char * zipfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	unzFile unzf = unzOpen(zipfile);
+	if(unzf == NULL)
+		return -1;
+	if(unzLocateFile(unzf, filename, 0) != UNZ_OK || unzOpenCurrentFile(unzf) != UNZ_OK)
+	{
+		unzClose(unzf);
+		return -1;
+	}
+	int result = image_readjpg2((FILE *)unzf, pwidth, pheight, image_data, bgcolor, image_zip_fread);
+	unzCloseCurrentFile(unzf);
+	unzClose(unzf);
+	return result;
+}
+
+extern int image_readjpg_in_chm(const char * chmfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_chm chm;
+	chm.chm = chm_open(chmfile);
+	if(chm.chm == NULL)
+		return -1;
+    if (chm_resolve_object(chm.chm, filename, &chm.ui) != CHM_RESOLVE_SUCCESS)
+	{
+		chm_close(chm.chm);
+		return -1;
+	}
+	chm.readpos = 0;
+	int result = image_readjpg2((FILE *)&chm, pwidth, pheight, image_data, bgcolor, image_chm_fread);
+	chm_close(chm.chm);
+	return result;
+}
+
+extern int image_readjpg_in_rar(const char * rarfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_rar rar;
+	struct RAROpenArchiveData arcdata;
+	arcdata.ArcName = (char *)rarfile;
+	arcdata.OpenMode = RAR_OM_EXTRACT;
+	arcdata.CmtBuf = NULL;
+	arcdata.CmtBufSize = 0;
+	HANDLE hrar = RAROpenArchive(&arcdata);
+	if(hrar == NULL)
+		return -1;
+	RARSetCallback(hrar, imagerarcbproc, (LONG)&rar);
+	do {
+		struct RARHeaderData header;
+		if(RARReadHeader(hrar, &header) != 0)
+			break;
+		if(stricmp(header.FileName, filename) == 0)
+		{
+			rar.size = header.UnpSize;
+			rar.idx = 0;
+			int e;
+			if((rar.buf = (byte *)calloc(1, rar.size)) == NULL || (e = RARProcessFile(hrar, RAR_TEST, NULL, NULL)) != 0)
+			{
+				RARCloseArchive(hrar);
+				return -1;
+			}
+			RARCloseArchive(hrar);
+			rar.idx = 0;
+			int result = image_readjpg2((FILE *)&rar, pwidth, pheight, image_data, bgcolor, image_rar_fread);
+			free((void *)rar.buf);
+			return result;
+		}
+	} while(RARProcessFile(hrar, RAR_SKIP, NULL, NULL) == 0);
+	RARCloseArchive(hrar);
+	return -1;
+}
+
+static int image_bmp_to_32color( DIB dib, dword * width, dword * height, pixel ** imgdata)  {
     BITMAPINFOHEADER *bi;
     int row_bytes, i, j;
-    uchar *src, *pixel_data;
-	dword *dest;
+    unsigned char *src, *pixel_data;
+	pixel *dest;
     DIB tmp_dib = NULL;
     RGBQUAD *palette;
 
     bi = (BITMAPINFOHEADER *)dib;
-	*imgdata = (dword *)malloc(sizeof(dword) * bi->biWidth * bi->biHeight);
+	*imgdata = (pixel *)malloc(sizeof(pixel) * bi->biWidth * bi->biHeight);
 	if(*imgdata == NULL)
 		return 1;
 
@@ -577,7 +975,7 @@ static int image_bmp_to_32color( DIB dib, dword * width, dword * height, dword *
 	*height = bi->biHeight;
 
     palette = (RGBQUAD *)(dib + sizeof(BITMAPINFOHEADER));
-    pixel_data = (uchar *)palette + bi->biClrUsed * sizeof(RGBQUAD);
+    pixel_data = (unsigned char *)palette + bi->biClrUsed * sizeof(RGBQUAD);
     row_bytes = (bi->biBitCount * bi->biWidth + 31 ) / 32 * 4;
 
     for( i = 0; i < bi->biHeight; i++ ) {
@@ -639,21 +1037,96 @@ static int image_bmp_to_32color( DIB dib, dword * width, dword * height, dword *
 	return 0;
 }
 
-extern int image_readbmp(const char * filename, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+static int image_readbmp2(void * handle, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor, t_bmp_fread readfn)
 {
-	FILE * fp = fopen(filename, "rb");
-	if(fp == NULL)
-		return -1;
 	DIB bmp;
-	bmp = bmp_read_dib_file(fp);
-	fclose(fp);
+	bmp = bmp_read_dib_file(handle, readfn);
 	if(bmp == NULL)
 		return 1;
 	*bgcolor = 0;
 	int result = image_bmp_to_32color(bmp, pwidth, pheight, image_data);
-	fclose(fp);
 	free((void *)bmp);
 	return result;
+}
+
+extern int image_readbmp(const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	FILE * fp = fopen(filename, "rb");
+	if(fp == NULL)
+		return -1;
+	int result = image_readbmp2(fp, pwidth, pheight, image_data, bgcolor, NULL);
+	fclose(fp);
+	return result;
+}
+
+extern int image_readbmp_in_zip(const char * zipfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	unzFile unzf = unzOpen(zipfile);
+	if(unzf == NULL)
+		return -1;
+	if(unzLocateFile(unzf, filename, 0) != UNZ_OK || unzOpenCurrentFile(unzf) != UNZ_OK)
+	{
+		unzClose(unzf);
+		return -1;
+	}
+	int result = image_readbmp2((FILE *)unzf, pwidth, pheight, image_data, bgcolor, image_zip_fread);
+	unzCloseCurrentFile(unzf);
+	unzClose(unzf);
+	return result;
+}
+
+extern int image_readbmp_in_chm(const char * chmfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_chm chm;
+	chm.chm = chm_open(chmfile);
+	if(chm.chm == NULL)
+		return -1;
+    if (chm_resolve_object(chm.chm, filename, &chm.ui) != CHM_RESOLVE_SUCCESS)
+	{
+		chm_close(chm.chm);
+		return -1;
+	}
+	chm.readpos = 0;
+	int result = image_readbmp2((FILE *)&chm, pwidth, pheight, image_data, bgcolor, image_chm_fread);
+	chm_close(chm.chm);
+	return result;
+}
+
+extern int image_readbmp_in_rar(const char * rarfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_rar rar;
+	struct RAROpenArchiveData arcdata;
+	arcdata.ArcName = (char *)rarfile;
+	arcdata.OpenMode = RAR_OM_EXTRACT;
+	arcdata.CmtBuf = NULL;
+	arcdata.CmtBufSize = 0;
+	HANDLE hrar = RAROpenArchive(&arcdata);
+	if(hrar == NULL)
+		return -1;
+	RARSetCallback(hrar, imagerarcbproc, (LONG)&rar);
+	do {
+		struct RARHeaderData header;
+		if(RARReadHeader(hrar, &header) != 0)
+			break;
+		if(stricmp(header.FileName, filename) == 0)
+		{
+			rar.size = header.UnpSize;
+			rar.idx = 0;
+			int e;
+			if((rar.buf = (byte *)calloc(1, rar.size)) == NULL || (e = RARProcessFile(hrar, RAR_TEST, NULL, NULL)) != 0)
+			{
+				RARCloseArchive(hrar);
+				return -1;
+			}
+			RARCloseArchive(hrar);
+			rar.idx = 0;
+			int result = image_readbmp2((FILE *)&rar, pwidth, pheight, image_data, bgcolor, image_rar_fread);
+			free((void *)rar.buf);
+			return result;
+		}
+	} while(RARProcessFile(hrar, RAR_SKIP, NULL, NULL) == 0);
+	RARCloseArchive(hrar);
+	return -1;
 }
 
 static void image_freetgadata(TGAData * data)
@@ -667,14 +1140,14 @@ static void image_freetgadata(TGAData * data)
 	free((void *)data);
 }
 
-extern int image_readtga(const char * filename, dword *pwidth, dword *pheight, dword ** image_data, dword * bgcolor)
+static int image_readtga2(void * handle, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor, TGAfread nfread, TGAfseek nfseek, TGAftell nftell)
 {
 	TGA *in;
 	TGAData *data;
 
 	if((data = (TGAData*)calloc(1, sizeof(TGAData))) == NULL)
 		return 1;
-	in = TGAOpen((char *)filename, "r");
+	in = TGAOpenFd(handle, nfread, nfseek, nftell);
 	if(in == NULL)
 	{
 		image_freetgadata(data);
@@ -691,7 +1164,7 @@ extern int image_readtga(const char * filename, dword *pwidth, dword *pheight, d
 	*pwidth = in->hdr.width;
 	*pheight = in->hdr.height;
 	*bgcolor = 0;
-	if((*image_data = (dword *)malloc(sizeof(dword) * *pwidth * *pheight)) == NULL)
+	if((*image_data = (pixel *)malloc(sizeof(pixel) * *pwidth * *pheight)) == NULL)
 	{
 		TGAClose(in);
 		image_freetgadata(data);
@@ -699,7 +1172,11 @@ extern int image_readtga(const char * filename, dword *pwidth, dword *pheight, d
 	}
 
 	byte * srcdata = data->img_data;
-	dword * imgdata = (*image_data) + in->hdr.x + in->hdr.y * *pwidth;
+	pixel * imgdata = (*image_data) + in->hdr.x + in->hdr.y * *pwidth;
+	if(in->hdr.x == 0)
+		in->hdr.horz = TGA_LEFT;
+	if(in->hdr.y == 0)
+		in->hdr.vert = TGA_TOP;
 	int i, j;
 	for(j = 0; j < *pheight; j ++)
 	{
@@ -719,18 +1196,100 @@ extern int image_readtga(const char * filename, dword *pwidth, dword *pheight, d
 				*imgdata = RGB(*srcdata * 255 / 31, *(srcdata + 1) * 255 / 31, *(srcdata + 2) * 255 / 31);
 				srcdata += 3;
 			}
-			if(in->hdr.vert == TGA_RIGHT)
+			if(in->hdr.horz == TGA_LEFT)
 				imgdata ++;
 			else
 				imgdata --;
 		}
-		if(in->hdr.vert == TGA_RIGHT && in->hdr.horz == TGA_TOP)
+		if(in->hdr.horz == TGA_LEFT && in->hdr.vert == TGA_BOTTOM)
 			imgdata -= 2 * *pwidth;
-		else if(in->hdr.vert == TGA_LEFT && in->hdr.horz == TGA_BOTTOM)
+		else if(in->hdr.horz == TGA_RIGHT && in->hdr.vert == TGA_TOP)
 			imgdata += 2 * *pwidth;
 	}
 
-	TGAClose(in);
+	free(in);
 	image_freetgadata(data);
 	return 0;
 }
+
+extern int image_readtga(const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	FILE * fp = fopen(filename, "rb");
+	if(fp == NULL)
+		return -1;
+	int result = image_readtga2(fp, pwidth, pheight, image_data, bgcolor, NULL, NULL, NULL);
+	fclose(fp);
+	return result;
+}
+
+extern int image_readtga_in_zip(const char * zipfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	unzFile unzf = unzOpen(zipfile);
+	if(unzf == NULL)
+		return -1;
+	if(unzLocateFile(unzf, filename, 0) != UNZ_OK || unzOpenCurrentFile(unzf) != UNZ_OK)
+	{
+		unzClose(unzf);
+		return -1;
+	}
+	int result = image_readtga2((FILE *)unzf, pwidth, pheight, image_data, bgcolor, image_zip_fread, image_zip_fseek, image_zip_ftell);
+	unzCloseCurrentFile(unzf);
+	unzClose(unzf);
+	return result;
+}
+
+extern int image_readtga_in_chm(const char * chmfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_chm chm;
+	chm.chm = chm_open(chmfile);
+	if(chm.chm == NULL)
+		return -1;
+    if (chm_resolve_object(chm.chm, filename, &chm.ui) != CHM_RESOLVE_SUCCESS)
+	{
+		chm_close(chm.chm);
+		return -1;
+	}
+	chm.readpos = 0;
+	int result = image_readtga2((FILE *)&chm, pwidth, pheight, image_data, bgcolor, image_chm_fread, image_chm_fseek, image_chm_ftell);
+	chm_close(chm.chm);
+	return result;
+}
+
+extern int image_readtga_in_rar(const char * rarfile, const char * filename, dword *pwidth, dword *pheight, pixel ** image_data, pixel * bgcolor)
+{
+	t_image_rar rar;
+	struct RAROpenArchiveData arcdata;
+	arcdata.ArcName = (char *)rarfile;
+	arcdata.OpenMode = RAR_OM_EXTRACT;
+	arcdata.CmtBuf = NULL;
+	arcdata.CmtBufSize = 0;
+	HANDLE hrar = RAROpenArchive(&arcdata);
+	if(hrar == NULL)
+		return -1;
+	RARSetCallback(hrar, imagerarcbproc, (LONG)&rar);
+	do {
+		struct RARHeaderData header;
+		if(RARReadHeader(hrar, &header) != 0)
+			break;
+		if(stricmp(header.FileName, filename) == 0)
+		{
+			rar.size = header.UnpSize;
+			rar.idx = 0;
+			int e;
+			if((rar.buf = (byte *)calloc(1, rar.size)) == NULL || (e = RARProcessFile(hrar, RAR_TEST, NULL, NULL)) != 0)
+			{
+				RARCloseArchive(hrar);
+				return -1;
+			}
+			RARCloseArchive(hrar);
+			rar.idx = 0;
+			int result = image_readtga2((FILE *)&rar, pwidth, pheight, image_data, bgcolor, image_rar_fread, image_rar_fseek, image_rar_ftell);
+			free((void *)rar.buf);
+			return result;
+		}
+	} while(RARProcessFile(hrar, RAR_SKIP, NULL, NULL) == 0);
+	RARCloseArchive(hrar);
+	return -1;
+}
+
+#endif
